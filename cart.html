@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8" />
+
+<link href="/css/reset.css" th:href="@{/css/reset.css}" rel="stylesheet" />
+<link href="/css/style.css" th:href="@{/css/style.css}" rel="stylesheet" />
+
+<script src="http://code.jquery.com/jquery-3.4.1.min.js"></script>
+<script th:inline="javascript">
+	/*<![CDATA[*/
+	$(() => {
+		//ページオンロード時に表示判定を行う
+		cartExistCheck();
+		
+		//チェックボックス選択時に削除ボタンの活性化判定を行う
+		$('.checkList').on('click', deleteActiveCheck);
+		
+		//削除ボタン押下時に削除処理を行う
+		$('#deleteBtn').on('click', deleteCart);
+		
+		//購入ボタン押下時にログイン判定と遷移を行う
+		$('#purchaseBtn').on('click', purchase);
+	});
+	
+	//カートに商品が入っているか判定し、表示を切り替える
+	//(オンロード時に実行)
+	function cartExistCheck(){
+		
+		if(/*[[${cartList.size() > 0}]]*/ false){
+			calcTotalPrice();
+		} else {
+			$('.noData').removeClass("hidden");
+			$('.buttonArea button').addClass("hidden");
+			$('table.cart').addClass("hidden");
+		}
+		
+		//削除ボタンを非活性化
+		deleteActiveCheck();
+	}
+	
+	//個数・合計価格を計算・表示する
+	//(オンロード時・削除完了時に実行)
+	function calcTotalPrice() {
+		let totalCount = 0;
+		let totalPrice = 0;
+	
+		let countList = $('.productCount');
+		let priceList = $('.subtotal');
+	
+		for(i = 0; i < countList.length; i++){
+			totalCount += parseInt($(countList[i]).text());
+			totalPrice += parseInt($(priceList[i]).text());
+		}
+		
+		$('#totalCount').text(totalCount);
+		$('#totalPrice').text(totalPrice);
+	};
+	
+	//削除ボタンの活性化判定
+	//(チェックボックス操作時・削除完了時に実行)
+	let deleteActiveCheck = (event) => {
+		
+		//チェックボックスを取得
+		let checkList = $(".checkList");
+		let disabled = true;
+		
+		//チェックが入っている場合、非活性化をオフにする
+		for(let i = 0; i < checkList.length ; i++){
+			if(checkList[i].checked){
+				disabled = false;
+				break;
+			}
+		}
+		
+		//判定結果を削除ボタンに反映
+		$("#deleteBtn").prop("disabled", disabled);
+	};
+	
+	//削除の実行
+	//(削除ボタン押下時に実行)
+	let deleteCart = (event) => {
+		//チェックリストの取得
+		let checkList = $('.checkList');
+		let deleteIdList = [];
+		let tdList = [];
+		
+		//チェックリストの確認
+		//	チェックがある場合、カートIDと対象行の取得
+		for(i = 0; i < checkList.length; i++){
+			if(checkList[i].checked){
+				deleteIdList.push($(checkList[i]).val());
+				tdList.push(checkList[i]);
+			}
+		}
+		
+		//JSONで削除するカートIDを送信
+		//削除成功した場合、画面からも該当商品を削除
+		$.ajax({
+			type: 'POST',
+			url: '/lion/cart/delete',
+			data: JSON.stringify({
+				"deleteCartId": deleteIdList
+			}),
+			contentType: 'application/json',
+			datatype: 'json',
+			scriptCharset: 'utf-8'
+		})
+		.then((result) => {
+				//画面から該当商品を削除する
+				for(i = 0; i < tdList.length; i++){
+					$(tdList[i]).parent().parent().remove();
+				}
+				
+				//表示の再判定
+				let checkList = $('.checkList');
+				if(checkList.length == 0){
+					$('.noData').removeClass("hidden");
+					$('.buttonArea button').addClass("hidden");
+					$('table.cart').addClass("hidden");
+				} else {
+					calcTotalPrice();
+				}
+				
+				//削除ボタン非活性
+				deleteActiveCheck();
+			}, () => {
+				console.error('Error: ajax connection failed.');
+			}
+		);
+	};
+	
+	//購入時のログイン判定(購入ボタン押下時に実行)
+	let purchase = (event) => {
+		let userId = /*[[${loginSession.getUserId()}]]*/ 0;
+		if(userId == 0 && isEmpty($('#hiddenUserName').val())){
+			alert('ログインしてください。');
+		} else {
+			window.location.href = "/lion/settlement/";
+		}
+	};
+	/*]]>*/
+</script>
+
+<title>Time of bliss</title>
+</head>
+<body>
+
+<header th:insert="fragments/page_header::pageHeader"></header>
+
+<main>
+
+	<h2>カート</h2>
+	<div class="container cart">
+		<div class="noData hidden">
+			<p class="info">カート情報はありません。</p>
+		</div>
+		<table class="cart">
+			<tr>
+				<th>選択</th><th>画像</th><th>商品名</th><th>価格(円)</th><th>個数</th><th>小計(円)</th>
+			</tr>
+			<!-- カート一覧 -->
+			<tr th:each="item : ${cartList}">
+				<td><input type="checkbox" class="checkList" th:value="${item.id}" /></td>
+				<td class="image"><img class="itemImage" th:src="@{{imagePath} (imagePath=${item.imageFullPath})}" /></td>
+				<td th:text="${item.productName}" />
+				<td class="number" th:text="${item.price}" />
+				<td class="number productCount" th:text="${item.productCount}" />
+				<td class="number subtotal" th:text="${item.subtotal}" />
+			</tr>
+			<!-- カート一覧ここまで-->
+			<tr>
+				<td class="totalArea"></td>
+				<td class="totalArea"></td>
+				<td class="totalArea">合計(円)</td>
+				<td class="totalArea"></td>
+				<td class="totalArea" id="totalCount">0</td>
+				<td class="totalArea" id="totalPrice">0</td>
+			</tr>
+		</table>
+		<div class="buttonArea">
+			<button id="deleteBtn">削除</button>
+			<button id="purchaseBtn">購入</button>
+		</div>
+	
+	</div>
+
+</main>
+
+</body>
+</html>
